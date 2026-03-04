@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.engine
+*.onnx
+*.pt
+build/
+install/
+log/
+detection_results/
+.vscode/
