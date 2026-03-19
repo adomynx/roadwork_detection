@@ -1,10 +1,32 @@
+# Python
 __pycache__/
 *.pyc
-*.engine
-*.onnx
-*.pt
+*.pyo
+
+# Models (too large for GitHub)
+models/*.engine
+models/*.onnx
+models/*.pt
+
+# Dataset (download separately)
+dataset/
+
+# Build artifacts
 build/
 install/
 log/
+
+# Detection results
 detection_results/
+
+# Editor backups
+*~
+*.swp
 .vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Prediction outputs
+video_results/

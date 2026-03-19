@@ -2,13 +2,14 @@ import time
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg import String
+from std_msgs.msg import String, Float64
 from cv_bridge import CvBridge
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 import cv2
 import json
 import os
 import random
+import numpy as np
 from datetime import datetime
 from ultralytics import YOLO
 
@@ -45,8 +46,7 @@ class RoadworkDetectorNode(Node):
         self.model = YOLO(model_path, task='detect')
         self.get_logger().info('Model loaded successfully!')
 
-        # Warm up the model (first inference is slow)
-        import numpy as np
+        # Warm up the model
         dummy = np.zeros((self.resize_h, self.resize_w, 3), dtype=np.uint8)
         self.model.predict(source=dummy, conf=0.5, verbose=False)
         self.get_logger().info('Model warm-up complete!')
@@ -67,13 +67,13 @@ class RoadworkDetectorNode(Node):
         # Subscribers
         self.image_sub = self.create_subscription(
             Image,
-            '/arena_camera_node/images',
+            '/camera/image_raw',
             self.image_callback,
-            qos_profile
+            10
         )
         self.info_sub = self.create_subscription(
             CameraInfo,
-            '/arena_camera_node/camera_info',
+            '/camera/camera_info',
             self.camera_info_callback,
             qos_profile
         )
@@ -82,35 +82,35 @@ class RoadworkDetectorNode(Node):
         self.annotated_pub = self.create_publisher(Image, '/detection/annotated_image', 10)
         self.results_pub = self.create_publisher(String, '/detection/results', 10)
 
+        # Subscribe to metrics for overlay
+        self.latest_distance = None
+        self.latest_confidence = None
+        self.latest_risk = None
+
+        self.metric_dist_sub = self.create_subscription(
+            Float64, '/metrics/distance', self.dist_metric_callback, 10)
+        self.metric_conf_sub = self.create_subscription(
+            Float64, '/metrics/confidence', self.conf_metric_callback, 10)
+        self.metric_risk_sub = self.create_subscription(
+            Float64, '/metrics/risk', self.risk_metric_callback, 10)
+
         # Frame counter
         self.frame_count = 0
 
-        # COCO class names
+        # ROADWork dataset classes (17 classes)
         self.class_names = {
-            0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
-            5: 'bus', 6: 'train', 7: 'truck', 8: 'boat', 9: 'traffic_light',
-            10: 'fire_hydrant', 11: 'stop_sign', 12: 'parking_meter', 13: 'bench',
-            14: 'bird', 15: 'cat', 16: 'dog', 17: 'horse', 18: 'sheep', 19: 'cow',
-            20: 'elephant', 21: 'bear', 22: 'zebra', 23: 'giraffe', 24: 'backpack',
-            25: 'umbrella', 26: 'handbag', 27: 'tie', 28: 'suitcase', 29: 'frisbee',
-            30: 'skis', 31: 'snowboard', 32: 'sports_ball', 33: 'kite',
-            34: 'baseball_bat', 35: 'baseball_glove', 36: 'skateboard',
-            37: 'surfboard', 38: 'tennis_racket', 39: 'bottle', 40: 'wine_glass',
-            41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 45: 'bowl',
-            46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 50: 'broccoli',
-            51: 'carrot', 52: 'hot_dog', 53: 'pizza', 54: 'donut', 55: 'cake',
-            56: 'chair', 57: 'couch', 58: 'potted_plant', 59: 'bed',
-            60: 'dining_table', 61: 'toilet', 62: 'tv', 63: 'laptop', 64: 'mouse',
-            65: 'remote', 66: 'keyboard', 67: 'cell_phone', 68: 'microwave',
-            69: 'oven', 70: 'toaster', 71: 'sink', 72: 'refrigerator', 73: 'book',
-            74: 'clock', 75: 'vase', 76: 'scissors', 77: 'teddy_bear',
-            78: 'hair_drier', 79: 'toothbrush'
+            0: 'Police Officer', 1: 'Police Vehicle', 2: 'Cone',
+            3: 'Fence', 4: 'Drum', 5: 'Barricade', 6: 'Barrier',
+            7: 'Work Vehicle', 8: 'Vertical Panel', 9: 'Tubular Marker',
+            10: 'Arrow Board', 11: 'Bike Lane', 12: 'Work Equipment',
+            13: 'Worker', 14: 'Other Roadwork Objects',
+            15: 'TTC Message Board', 16: 'TTC Sign'
         }
 
-        # Colors for each class (BGR) - auto-generated
+        # Colors for each class (BGR)
         random.seed(42)
         self.class_colors = {}
-        for i in range(80):
+        for i in range(17):
             self.class_colors[i] = (
                 random.randint(50, 255),
                 random.randint(50, 255),
@@ -123,6 +123,15 @@ class RoadworkDetectorNode(Node):
 
     def camera_info_callback(self, msg):
         self.camera_info = msg
+
+    def dist_metric_callback(self, msg):
+        self.latest_distance = msg.data
+
+    def conf_metric_callback(self, msg):
+        self.latest_confidence = msg.data
+
+    def risk_metric_callback(self, msg):
+        self.latest_risk = msg.data
 
     def image_callback(self, msg):
         self.frame_count += 1
@@ -152,11 +161,9 @@ class RoadworkDetectorNode(Node):
                 cls_id = int(box.cls[0])
                 confidence = float(box.conf[0])
 
-                # Filter for target classes only
                 if cls_id not in self.target_classes:
                     continue
 
-                # Get bounding box (on resized image)
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
 
                 # Step 5: Scale back to original resolution
@@ -167,10 +174,8 @@ class RoadworkDetectorNode(Node):
                 x2_orig = int(x2 * scale_x)
                 y2_orig = int(y2 * scale_y)
 
-                # Get class name
                 class_name = self.class_names.get(cls_id, f'class_{cls_id}')
 
-                # Store detection
                 detections.append({
                     'class': class_name,
                     'class_id': cls_id,
@@ -178,7 +183,7 @@ class RoadworkDetectorNode(Node):
                     'bbox': [x1_orig, y1_orig, x2_orig, y2_orig]
                 })
 
-                # Step 6: Draw on original image
+                # Step 6: Draw bounding box on original image
                 color = self.class_colors.get(cls_id, (255, 255, 255))
                 cv2.rectangle(cv_image, (x1_orig, y1_orig), (x2_orig, y2_orig), color, 3)
                 label = f'{class_name} {confidence:.2f}'
@@ -192,6 +197,45 @@ class RoadworkDetectorNode(Node):
 
             # Calculate processing time
             processing_time = time.time() - start_time
+
+            # Step 6.5: Draw metrics overlay
+            overlay = cv_image.copy()
+            cv2.rectangle(overlay, (10, 10), (420, 200), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.7, cv_image, 0.3, 0, cv_image)
+
+            cv2.putText(cv_image, "ODD Exit Metrics", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+
+            d_val = self.latest_distance
+            c_val = self.latest_confidence
+            r_val = self.latest_risk
+
+            if d_val is not None:
+                d_color = (0, 0, 255) if d_val < 5 else (0, 255, 0) if d_val > 30 else (0, 165, 255)
+                cv2.putText(cv_image, f"Distance: {d_val:.1f}m", (20, 80),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, d_color, 2)
+            else:
+                cv2.putText(cv_image, "Distance: N/A", (20, 80),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+
+            if c_val is not None:
+                c_color = (0, 0, 255) if c_val > 0.7 else (0, 255, 0) if c_val < 0.3 else (0, 165, 255)
+                cv2.putText(cv_image, f"Confidence: {c_val*100:.1f}%", (20, 120),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, c_color, 2)
+            else:
+                cv2.putText(cv_image, "Confidence: N/A", (20, 120),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+
+            if r_val is not None:
+                r_color = (0, 0, 255) if r_val > 0.7 else (0, 255, 0) if r_val < 0.3 else (0, 165, 255)
+                cv2.putText(cv_image, f"Risk: {r_val*100:.1f}%", (20, 160),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, r_color, 2)
+            else:
+                cv2.putText(cv_image, "Risk: N/A", (20, 160),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+
+            cv2.putText(cv_image, f"Detections: {len(detections)} | {processing_time*1000:.0f}ms",
+                        (20, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
             # Save frame if detections found
             if len(detections) > 0:
@@ -231,7 +275,10 @@ class RoadworkDetectorNode(Node):
             self.get_logger().info(
                 f'Frame {self.frame_count}: {len(detections)} detections | '
                 f'Processing: {processing_time*1000:.0f}ms | '
-                f'Image stamp: {msg.header.stamp.sec}.{msg.header.stamp.nanosec}'
+                f'D: {d_val:.1f}m | C: {c_val*100:.1f}% | R: {r_val*100:.1f}%'
+                if d_val and c_val and r_val else
+                f'Frame {self.frame_count}: {len(detections)} detections | '
+                f'Processing: {processing_time*1000:.0f}ms | Metrics: waiting...'
             )
 
         except Exception as e:

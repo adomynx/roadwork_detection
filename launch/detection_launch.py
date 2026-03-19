@@ -8,11 +8,27 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('roadwork_detection')
 
     config_file = os.path.join(pkg_dir, 'config', 'detection_params.yaml')
-    model_path = os.path.join(pkg_dir, 'models', 'yolov8x.engine')
+    model_path = os.path.join(pkg_dir, 'models', 'yolov8x_roadwork.engine')
 
     venv_path = os.path.expanduser('~/roadwork_project/venv/lib/python3.10/site-packages')
+    python_env = {'PYTHONPATH': venv_path + ':' + os.environ.get('PYTHONPATH', '')}
+
+    video_dir = os.path.expanduser(
+        '~/roadwork_project/workspace/src/roadwork_detection/dataset/videos_compressed'
+    )
 
     return LaunchDescription([
+        Node(
+            package='roadwork_detection',
+            executable='video_publisher_node',
+            name='video_publisher_node',
+            output='screen',
+            parameters=[
+                {'video_dir': video_dir},
+                {'fps': 10.0},
+            ],
+            additional_env=python_env
+        ),
         Node(
             package='roadwork_detection',
             executable='detector_node',
@@ -22,8 +38,30 @@ def generate_launch_description():
                 config_file,
                 {'model_path': model_path}
             ],
-            additional_env={
-                'PYTHONPATH': venv_path + ':' + os.environ.get('PYTHONPATH', '')
-            }
-        )
+            additional_env=python_env
+        ),
+        Node(
+            package='roadwork_detection',
+            executable='distance_node',
+            name='distance_node',
+            output='screen',
+            parameters=[config_file],
+            additional_env=python_env
+        ),
+        Node(
+            package='roadwork_detection',
+            executable='confidence_node',
+            name='confidence_node',
+            output='screen',
+            parameters=[config_file],
+            additional_env=python_env
+        ),
+        Node(
+            package='roadwork_detection',
+            executable='risk_node',
+            name='risk_node',
+            output='screen',
+            parameters=[config_file],
+            additional_env=python_env
+        ),
     ])
