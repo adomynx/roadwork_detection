@@ -1,7 +1,7 @@
 import time
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 from std_msgs.msg import String, Float64
 from cv_bridge import CvBridge
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
@@ -57,25 +57,18 @@ class RoadworkDetectorNode(Node):
         # Store camera info
         self.camera_info = None
 
-        # QoS profile to match rosbag
-        qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
-
-        # Subscribers
+        # Subscribers - compressed ZED image
         self.image_sub = self.create_subscription(
-            Image,
-            '/camera/image_raw',
-            self.image_callback,
+            CompressedImage,
+            '/zed/zed_node/left_raw/image_raw_color/compressed',
+            self.compressed_image_callback,
             10
         )
         self.info_sub = self.create_subscription(
             CameraInfo,
-            '/camera/camera_info',
+            '/zed/zed_node/left_raw/camera_info',
             self.camera_info_callback,
-            qos_profile
+            10
         )
 
         # Publishers
@@ -133,13 +126,22 @@ class RoadworkDetectorNode(Node):
     def risk_metric_callback(self, msg):
         self.latest_risk = msg.data
 
-    def image_callback(self, msg):
+    def compressed_image_callback(self, msg):
+        try:
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if cv_image is None:
+                self.get_logger().error('Failed to decode compressed image')
+                return
+            self._process_frame(cv_image, msg.header)
+        except Exception as e:
+            self.get_logger().error(f'Error decoding compressed image: {str(e)}')
+
+    def _process_frame(self, cv_image, header):
         self.frame_count += 1
         start_time = time.time()
 
         try:
-            # Step 1: Convert ROS Image to OpenCV (BGR)
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             original_h, original_w = cv_image.shape[:2]
 
             # Step 2: Resize for inference
@@ -256,13 +258,13 @@ class RoadworkDetectorNode(Node):
 
             # Step 7: Publish annotated image
             annotated_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
-            annotated_msg.header = msg.header
+            annotated_msg.header = header
             self.annotated_pub.publish(annotated_msg)
 
             # Step 8: Publish detection results as JSON
             results_data = {
                 'frame': self.frame_count,
-                'timestamp': msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
+                'timestamp': header.stamp.sec + header.stamp.nanosec * 1e-9,
                 'processing_time_ms': round(processing_time * 1000, 1),
                 'num_detections': len(detections),
                 'detections': detections
@@ -276,7 +278,7 @@ class RoadworkDetectorNode(Node):
                 f'Frame {self.frame_count}: {len(detections)} detections | '
                 f'Processing: {processing_time*1000:.0f}ms | '
                 f'D: {d_val:.1f}m | C: {c_val*100:.1f}% | R: {r_val*100:.1f}%'
-                if d_val and c_val and r_val else
+                if d_val is not None and c_val is not None and r_val is not None else
                 f'Frame {self.frame_count}: {len(detections)} detections | '
                 f'Processing: {processing_time*1000:.0f}ms | Metrics: waiting...'
             )

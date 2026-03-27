@@ -5,12 +5,17 @@ roadwork_detector_node:
     resize_height: 480
     target_classes: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
 
-distance_node:
+lidar_fusion_node:
   ros__parameters:
-    camera_height: 1.5
+    lidar_to_cam_z_offset: 1.011   # from calibration matrix
     alpha_d: 0.15
+    default_fx: 1000.0             # updated automatically from camera_info
     default_fy: 1000.0
+    default_cx: 640.0
     default_cy: 540.0
+    min_distance: 2.0              # ignore points closer than 0.5m
+    max_distance: 80.0             # ignore points farther than 80m
+    bbox_expand_px: 25            # expand bbox by 10px each side for LiDAR matching
 
 confidence_node:
   ros__parameters:

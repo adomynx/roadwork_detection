@@ -13,22 +13,7 @@ def generate_launch_description():
     venv_path = os.path.expanduser('~/roadwork_project/venv/lib/python3.10/site-packages')
     python_env = {'PYTHONPATH': venv_path + ':' + os.environ.get('PYTHONPATH', '')}
 
-    video_dir = os.path.expanduser(
-        '~/roadwork_project/workspace/src/roadwork_detection/dataset/videos_compressed'
-    )
-
     return LaunchDescription([
-        Node(
-            package='roadwork_detection',
-            executable='video_publisher_node',
-            name='video_publisher_node',
-            output='screen',
-            parameters=[
-                {'video_dir': video_dir},
-                {'fps': 10.0},
-            ],
-            additional_env=python_env
-        ),
         Node(
             package='roadwork_detection',
             executable='detector_node',
@@ -42,8 +27,8 @@ def generate_launch_description():
         ),
         Node(
             package='roadwork_detection',
-            executable='distance_node',
-            name='distance_node',
+            executable='lidar_fusion_node',
+            name='lidar_fusion_node',
             output='screen',
             parameters=[config_file],
             additional_env=python_env
