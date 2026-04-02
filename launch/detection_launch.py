@@ -14,6 +14,7 @@ def generate_launch_description():
     python_env = {'PYTHONPATH': venv_path + ':' + os.environ.get('PYTHONPATH', '')}
 
     return LaunchDescription([
+        # Camera detection
         Node(
             package='roadwork_detection',
             executable='detector_node',
@@ -25,14 +26,25 @@ def generate_launch_description():
             ],
             additional_env=python_env
         ),
+        # LiDAR obstacle detection (NEW)
         Node(
             package='roadwork_detection',
-            executable='lidar_fusion_node',
-            name='lidar_fusion_node',
+            executable='lidar_detection_node',
+            name='lidar_detection_node',
             output='screen',
             parameters=[config_file],
             additional_env=python_env
         ),
+        # Camera + LiDAR fusion (NEW)
+        Node(
+            package='roadwork_detection',
+            executable='fusion_node',
+            name='fusion_node',
+            output='screen',
+            parameters=[config_file],
+            additional_env=python_env
+        ),
+        # Confidence metric
         Node(
             package='roadwork_detection',
             executable='confidence_node',
@@ -41,6 +53,7 @@ def generate_launch_description():
             parameters=[config_file],
             additional_env=python_env
         ),
+        # Risk metric
         Node(
             package='roadwork_detection',
             executable='risk_node',

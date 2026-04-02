@@ -30,7 +30,8 @@ setup(
             'confidence_node = roadwork_detection.confidence_node:main',
             'risk_node = roadwork_detection.risk_node:main',
             'video_publisher_node = roadwork_detection.video_publisher_node:main',
-            'lidar_fusion_node = roadwork_detection.lidar_fusion_node:main',
+            'lidar_detection_node = roadwork_detection.lidar_detection_node:main',
+            'fusion_node = roadwork_detection.fusion_node:main',
         ],
     },
 )

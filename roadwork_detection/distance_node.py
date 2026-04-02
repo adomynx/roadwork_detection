@@ -48,7 +48,7 @@ class DistanceNode(Node):
         )
         self.info_sub = self.create_subscription(
             CameraInfo,
-            '/camera/camera_info',
+            '/zed/zed_node/left_raw/camera_info',
             self.camera_info_callback,
             qos_profile
         )
