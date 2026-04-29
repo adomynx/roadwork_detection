@@ -52,7 +52,7 @@ class ConfidenceNode(Node):
             if N == 0:
                 if self.c_frame_smoothed is not None:
                     self.c_frame_smoothed = (1 - self.alpha_c) * self.c_frame_smoothed
-                    if self.c_frame_smoothed < 0.01:
+                    if self.c_frame_smoothed < 0.03:
                         self.c_frame_smoothed = None
 
                     if self.c_frame_smoothed is not None:

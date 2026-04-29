@@ -78,7 +78,7 @@ class DistanceNode(Node):
                 # Actively decay smoothed value toward zero
                 if self.d_min_smoothed is not None:
                     self.d_min_smoothed = (1 - self.alpha_d) * self.d_min_smoothed
-                    if self.d_min_smoothed < 0.1:
+                    if self.d_min_smoothed < 1.0:
                         self.d_min_smoothed = None
 
                     # Publish decaying value

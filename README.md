@@ -3,9 +3,12 @@
 Real-time roadwork detection, road condition estimation, and ODD (Operational Design Domain) exit risk assessment for autonomous vehicles. Built for ROS2 Humble.
 
 ## Repository Structure
+
+```
 ├── roadwork_detection/     # Roadwork object detection + LiDAR fusion + metrics
 ├── road_condition/         # Road surface condition estimation (dry/wet/snow)
 └── risk_assessment/        # ODD exit risk assessment
+```
 
 ## 3 Packages
 
@@ -33,6 +36,8 @@ ODD exit risk assessment combining distance + confidence + dynamic objects.
 - `risk_node` — R_frame = max(R_d, R_c) with EMA smoothing
 
 ## Pipeline Architecture
+
+```
 MCAP Rosbag
 ├── ZED Camera ──→ detector_node (YOLOv8x TensorRT, 17 classes, ~9ms)
 │                       ↓ 2D detections
@@ -49,7 +54,8 @@ MCAP Rosbag
 │                  (crop road surface)   (EfficientNet-B0)
 │                                            ↓
 └── All metrics overlaid on annotated image (rqt_image_view)
-Distance | Confidence | Risk | Road: dry/wet/snow
+    Distance | Confidence | Risk | Road: dry/wet/snow
+```
 
 ## Topics
 

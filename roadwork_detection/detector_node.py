@@ -4,7 +4,6 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, CompressedImage
 from std_msgs.msg import String, Float64
 from cv_bridge import CvBridge
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 import cv2
 import json
 import os
@@ -79,6 +78,13 @@ class RoadworkDetectorNode(Node):
         self.latest_distance = None
         self.latest_confidence = None
         self.latest_risk = None
+        self.latest_road_condition = None
+
+        # Timestamps for metric timeout
+        self.last_distance_time = None
+        self.last_confidence_time = None
+        self.last_risk_time = None
+        self.metric_timeout = 2.0  # seconds
 
         self.metric_dist_sub = self.create_subscription(
             Float64, '/metrics/distance', self.dist_metric_callback, 10)
@@ -86,6 +92,8 @@ class RoadworkDetectorNode(Node):
             Float64, '/metrics/confidence', self.conf_metric_callback, 10)
         self.metric_risk_sub = self.create_subscription(
             Float64, '/metrics/risk', self.risk_metric_callback, 10)
+        self.road_condition_sub = self.create_subscription(
+            String, '/road/condition', self.road_condition_callback, 10)
 
         # Frame counter
         self.frame_count = 0
@@ -119,12 +127,21 @@ class RoadworkDetectorNode(Node):
 
     def dist_metric_callback(self, msg):
         self.latest_distance = msg.data
+        self.last_distance_time = time.time()
 
     def conf_metric_callback(self, msg):
         self.latest_confidence = msg.data
+        self.last_confidence_time = time.time()
 
     def risk_metric_callback(self, msg):
         self.latest_risk = msg.data
+        self.last_risk_time = time.time()
+
+    def road_condition_callback(self, msg):
+        try:
+            self.latest_road_condition = json.loads(msg.data)
+        except Exception:
+            pass
 
     def compressed_image_callback(self, msg):
         try:
@@ -144,18 +161,18 @@ class RoadworkDetectorNode(Node):
         try:
             original_h, original_w = cv_image.shape[:2]
 
-            # Step 2: Resize for inference
+            # Resize for inference
             resized = cv2.resize(cv_image, (self.resize_w, self.resize_h),
                                  interpolation=cv2.INTER_LINEAR)
 
-            # Step 3: Run YOLOv8 inference (GPU accelerated)
+            # Run YOLOv8 inference
             results = self.model.predict(
                 source=resized,
                 conf=self.conf_threshold,
                 verbose=False
             )
 
-            # Step 4: Process detections
+            # Process detections
             detections = []
             result = results[0]
 
@@ -168,7 +185,7 @@ class RoadworkDetectorNode(Node):
 
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
 
-                # Step 5: Scale back to original resolution
+                # Scale back to original resolution
                 scale_x = original_w / self.resize_w
                 scale_y = original_h / self.resize_h
                 x1_orig = int(x1 * scale_x)
@@ -185,7 +202,7 @@ class RoadworkDetectorNode(Node):
                     'bbox': [x1_orig, y1_orig, x2_orig, y2_orig]
                 })
 
-                # Step 6: Draw bounding box on original image
+                # Draw bounding box
                 color = self.class_colors.get(cls_id, (255, 255, 255))
                 cv2.rectangle(cv_image, (x1_orig, y1_orig), (x2_orig, y2_orig), color, 3)
                 label = f'{class_name} {confidence:.2f}'
@@ -197,47 +214,70 @@ class RoadworkDetectorNode(Node):
                 cv2.putText(cv_image, label, (x1_orig, y1_orig - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
-            # Calculate processing time
             processing_time = time.time() - start_time
 
-            # Step 6.5: Draw metrics overlay
-            overlay = cv_image.copy()
-            cv2.rectangle(overlay, (10, 10), (420, 200), (0, 0, 0), -1)
-            cv2.addWeighted(overlay, 0.7, cv_image, 0.3, 0, cv_image)
+            # Reset stale metrics (timeout after 2 seconds)
+            now = time.time()
+            if self.last_distance_time and (now - self.last_distance_time) > self.metric_timeout:
+                self.latest_distance = None
+            if self.last_confidence_time and (now - self.last_confidence_time) > self.metric_timeout:
+                self.latest_confidence = None
+            if self.last_risk_time and (now - self.last_risk_time) > self.metric_timeout:
+                self.latest_risk = None
 
-            cv2.putText(cv_image, "ODD Exit Metrics", (20, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-
+            # Draw metrics overlay (compact, top-left)
             d_val = self.latest_distance
             c_val = self.latest_confidence
             r_val = self.latest_risk
+            rc = self.latest_road_condition
 
-            if d_val is not None:
+            overlay = cv_image.copy()
+            cv2.rectangle(overlay, (5, 5), (250, 130), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, 0.7, cv_image, 0.3, 0, cv_image)
+
+            cv2.putText(cv_image, "ODD Exit Metrics", (10, 22),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
+
+            # Distance
+            if d_val is not None and d_val > 1.0:
                 d_color = (0, 0, 255) if d_val < 5 else (0, 255, 0) if d_val > 30 else (0, 165, 255)
-                cv2.putText(cv_image, f"Distance: {d_val:.1f}m", (20, 80),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, d_color, 2)
+                cv2.putText(cv_image, f"Dist: {d_val:.1f}m", (10, 42),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, d_color, 1)
             else:
-                cv2.putText(cv_image, "Distance: N/A", (20, 80),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+                cv2.putText(cv_image, "Dist: N/A", (10, 42),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
 
-            if c_val is not None:
+            # Confidence
+            if c_val is not None and c_val > 0.03:
                 c_color = (0, 0, 255) if c_val > 0.7 else (0, 255, 0) if c_val < 0.3 else (0, 165, 255)
-                cv2.putText(cv_image, f"Confidence: {c_val*100:.1f}%", (20, 120),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, c_color, 2)
+                cv2.putText(cv_image, f"Conf: {c_val*100:.1f}%", (10, 60),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, c_color, 1)
             else:
-                cv2.putText(cv_image, "Confidence: N/A", (20, 120),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+                cv2.putText(cv_image, "Conf: N/A", (10, 60),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
 
-            if r_val is not None:
+            # Risk
+            if r_val is not None and r_val > 0.03:
                 r_color = (0, 0, 255) if r_val > 0.7 else (0, 255, 0) if r_val < 0.3 else (0, 165, 255)
-                cv2.putText(cv_image, f"Risk: {r_val*100:.1f}%", (20, 160),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, r_color, 2)
+                cv2.putText(cv_image, f"Risk: {r_val*100:.1f}%", (10, 78),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, r_color, 1)
             else:
-                cv2.putText(cv_image, "Risk: N/A", (20, 160),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+                cv2.putText(cv_image, "Risk: N/A", (10, 78),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
 
-            cv2.putText(cv_image, f"Detections: {len(detections)} | {processing_time*1000:.0f}ms",
-                        (20, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            # Road condition
+            if rc is not None:
+                condition = rc.get('condition', 'N/A')
+                rc_conf = rc.get('confidence', 0)
+                rc_color = (0, 255, 0) if condition == 'dry' else (0, 165, 255) if condition == 'wet' else (0, 0, 255)
+                cv2.putText(cv_image, f"Road: {condition} ({rc_conf*100:.0f}%)", (10, 96),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, rc_color, 1)
+            else:
+                cv2.putText(cv_image, "Road: N/A", (10, 96),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
+
+            cv2.putText(cv_image, f"Det: {len(detections)} | {processing_time*1000:.0f}ms",
+                        (10, 114), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
 
             # Save frame if detections found
             if len(detections) > 0:
@@ -256,12 +296,12 @@ class RoadworkDetectorNode(Node):
 
                 self.get_logger().info(f'Saved: {img_filename}')
 
-            # Step 7: Publish annotated image
+            # Publish annotated image
             annotated_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
             annotated_msg.header = header
             self.annotated_pub.publish(annotated_msg)
 
-            # Step 8: Publish detection results as JSON
+            # Publish detection results as JSON
             results_data = {
                 'frame': self.frame_count,
                 'timestamp': header.stamp.sec + header.stamp.nanosec * 1e-9,
@@ -274,14 +314,21 @@ class RoadworkDetectorNode(Node):
             self.results_pub.publish(results_msg)
 
             # Log
-            self.get_logger().info(
-                f'Frame {self.frame_count}: {len(detections)} detections | '
-                f'Processing: {processing_time*1000:.0f}ms | '
-                f'D: {d_val:.1f}m | C: {c_val*100:.1f}% | R: {r_val*100:.1f}%'
-                if d_val is not None and c_val is not None and r_val is not None else
-                f'Frame {self.frame_count}: {len(detections)} detections | '
-                f'Processing: {processing_time*1000:.0f}ms | Metrics: waiting...'
-            )
+            road_str = ''
+            if rc is not None:
+                road_str = f' | Road: {rc.get("condition", "?")} ({rc.get("confidence", 0)*100:.0f}%)'
+
+            if d_val is not None and d_val > 1.0 and c_val is not None and c_val > 0.03 and r_val is not None and r_val > 0.03:
+                self.get_logger().info(
+                    f'Frame {self.frame_count}: {len(detections)} detections | '
+                    f'Processing: {processing_time*1000:.0f}ms | '
+                    f'D: {d_val:.1f}m | C: {c_val*100:.1f}% | R: {r_val*100:.1f}%{road_str}'
+                )
+            else:
+                self.get_logger().info(
+                    f'Frame {self.frame_count}: {len(detections)} detections | '
+                    f'Processing: {processing_time*1000:.0f}ms | Metrics: N/A{road_str}'
+                )
 
         except Exception as e:
             self.get_logger().error(f'Error processing frame: {str(e)}')

@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import setup
 
-package_name = 'roadwork_detection'
+package_name = 'risk_assessment'
 
 setup(
     name=package_name,
@@ -14,23 +14,17 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
-        (os.path.join('share', package_name, 'models'), glob('models/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='agbueker',
     maintainer_email='agbueker@todo.todo',
-    description='ROS2 Roadwork Detection using YOLOv8 TensorRT',
+    description='ROS2 Risk Assessment Node for Autonomous Vehicles',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'detector_node = roadwork_detection.detector_node:main',
-            'distance_node = roadwork_detection.distance_node:main',
-            'confidence_node = roadwork_detection.confidence_node:main',
-            'video_publisher_node = roadwork_detection.video_publisher_node:main',
-            'lidar_detection_node = roadwork_detection.lidar_detection_node:main',
-            'fusion_node = roadwork_detection.fusion_node:main',
+            'risk_node = risk_assessment.risk_node:main',
         ],
     },
 )

@@ -92,7 +92,7 @@ class FusionNode(Node):
                 # Decay
                 if self.d_min_smoothed is not None:
                     self.d_min_smoothed = (1 - self.alpha_d) * self.d_min_smoothed
-                    if self.d_min_smoothed < 0.1:
+                    if self.d_min_smoothed < 0.5:
                         self.d_min_smoothed = None
                     else:
                         dist_msg = Float64()

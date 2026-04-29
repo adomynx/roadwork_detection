@@ -53,13 +53,4 @@ def generate_launch_description():
             parameters=[config_file],
             additional_env=python_env
         ),
-        # Risk metric
-        Node(
-            package='roadwork_detection',
-            executable='risk_node',
-            name='risk_node',
-            output='screen',
-            parameters=[config_file],
-            additional_env=python_env
-        ),
     ])

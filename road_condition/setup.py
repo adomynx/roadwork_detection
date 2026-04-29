@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import setup
 
-package_name = 'roadwork_detection'
+package_name = 'road_condition'
 
 setup(
     name=package_name,
@@ -20,17 +20,13 @@ setup(
     zip_safe=True,
     maintainer='agbueker',
     maintainer_email='agbueker@todo.todo',
-    description='ROS2 Roadwork Detection using YOLOv8 TensorRT',
+    description='ROS2 Road Condition Estimation using EfficientNet-B0',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'detector_node = roadwork_detection.detector_node:main',
-            'distance_node = roadwork_detection.distance_node:main',
-            'confidence_node = roadwork_detection.confidence_node:main',
-            'video_publisher_node = roadwork_detection.video_publisher_node:main',
-            'lidar_detection_node = roadwork_detection.lidar_detection_node:main',
-            'fusion_node = roadwork_detection.fusion_node:main',
+            'road_patch_node = road_condition.road_patch_node:main',
+            'road_condition_node = road_condition.road_condition_node:main',
         ],
     },
 )
