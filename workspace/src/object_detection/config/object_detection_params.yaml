@@ -1,0 +1,12 @@
+object_detector_node:
+  ros__parameters:
+    # Leave model_path empty to use the bundled engine resolved from the
+    # package share dir (share/object_detection/models/yolov8x_coco.engine).
+    # Set an absolute path here to override.
+    model_path: ""
+    confidence_threshold: 0.35
+    iou_threshold: 0.45
+    publish_annotated: true
+    input_topic: "/zed/zed_node/left_raw/image_raw_color/compressed"
+    results_topic: "/objects/results"
+    annotated_topic: "/objects/annotated_image"

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>object_detection</name>
+  <version>0.1.0</version>
+  <description>
+    General-purpose object detection (YOLOv8x COCO via TensorRT FP16)
+    for the autonomous vehicle perception pipeline.
+  </description>
+  <maintainer email="kartiktoons@gmail.com">Kartik Wakekar</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

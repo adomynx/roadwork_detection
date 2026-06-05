@@ -1,0 +1,31 @@
+roadwork_detector_node:
+  ros__parameters:
+    confidence_threshold: 0.25
+    resize_width: 640
+    resize_height: 480
+    target_classes: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+
+lidar_detection_node:
+  ros__parameters:
+    ground_threshold: 0.3
+    min_height: -1.5
+    max_height: 3.0
+    min_distance: 1.0
+    max_distance: 50.0
+    cluster_tolerance: 0.8
+    min_cluster_size: 5
+    max_cluster_size: 5000
+    voxel_size: 0.15
+
+fusion_node:
+  ros__parameters:
+    alpha_d: 0.15
+    projection_tolerance: 50
+
+confidence_node:
+  ros__parameters:
+    lambda_factor: 0.50
+    n_max: 12
+    alpha_c: 0.15
+
+

@@ -1,0 +1,7 @@
+risk_node:
+  ros__parameters:
+    d_near: 5.0
+    d_far: 30.0
+    w_c: 0.50
+    w_d: 0.50
+    alpha_r: 0.20

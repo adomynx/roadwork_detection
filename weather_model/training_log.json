@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-05-06 12:09:12",
+  "dataset": "ACDC",
+  "classes": [
+    "clear",
+    "fog",
+    "rain",
+    "snow"
+  ],
+  "phase1": {
+    "epochs": 34,
+    "best_val_acc": 97.8
+  },
+  "phase2": {
+    "epochs": 28,
+    "best_val_acc": 99.8
+  },
+  "final_accuracy": 99.8
+}

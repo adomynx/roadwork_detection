@@ -1,0 +1,30 @@
+# Build and Log files
+workspace/build/
+workspace/install/
+workspace/log/
+logs/
+run_logs/
+detection_results/
+__pycache__/
+
+# Python Environments
+venv/
+
+# Heavy ML Weights
+*.engine
+*.keras
+*.pt
+*.pth
+
+# Heavy Data & Media
+rosbag2_*/
+*.mp4
+*.avi
+
+# Root level images (Keep the images/ folder)
+/*.png
+/*.jpg
+/*.gv
+/*.drawio
+*.onnx
+*.h5
